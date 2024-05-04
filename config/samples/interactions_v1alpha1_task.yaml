@@ -1,0 +1,12 @@
+apiVersion: interactions.frenchtoasters.io/v1alpha1
+kind: Task
+metadata:
+  labels:
+    app.kubernetes.io/name: task
+    app.kubernetes.io/instance: task-sample
+    app.kubernetes.io/part-of: shopkeeper
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: shopkeeper
+  name: task-sample
+spec:
+  # TODO(user): Add fields here
