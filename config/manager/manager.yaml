@@ -57,7 +57,7 @@ spec:
       #             values:
       #               - linux
       securityContext:
-        runAsNonRoot: true
+        runAsNonRoot: false
         # TODO(user): For common cases that do not require escalating privileges
         # it is recommended to ensure that all your Pods/Containers are restrictive.
         # More info: https://kubernetes.io/docs/concepts/security/pod-security-standards/#restricted
@@ -70,7 +70,7 @@ spec:
         - /manager
         args:
         - --leader-elect
-        image: controller:latest
+        image: shopkeeper-controller:latest
         name: manager
         securityContext:
           allowPrivilegeEscalation: false

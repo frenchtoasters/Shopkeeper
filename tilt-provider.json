@@ -1,0 +1,16 @@
+{
+  "name": "shopkeeper",
+  "config": {
+    "image": "shopkeeper-manager",
+    "live_reload_deps": [
+      "main.go",
+      "go.mod",
+      "go.sum",
+      "api",
+      "internal",
+      "cmd",
+	  "config",
+	  "util"
+    ]
+  }
+}

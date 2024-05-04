@@ -118,7 +118,7 @@ func (r *TaskReconciler) reconcile(ctx context.Context, taskScope *interactionsv
 
 	job, err := clientset.BatchV1().Jobs(taskScope.Namespace).Apply(ctx, &jobConfig, v1.ApplyOptions{})
 	if err != nil {
-		taskScope.Status.FailureMessage = err
+		taskScope.Status.FailureMessage = Pointer(err.Error())
 		if err := (*patch.Helper).Patch(helper, context.TODO(), taskScope); err != nil {
 			return ctrl.Result{}, err
 		}

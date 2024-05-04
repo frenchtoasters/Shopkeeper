@@ -5,6 +5,17 @@ IMG ?= controller:latest
 ENVTEST_K8S_VERSION = 1.27.1
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
+GOPATH  := $(shell go env GOPATH)
+GOARCH  := $(shell go env GOARCH)
+GOOS    := $(shell go env GOOS)
+GOPROXY := $(shell go env GOPROXY)
+ifeq ($(GOPROXY),)
+GOPROXY := https://proxy.golang.org
+endif
+export GOPROXY
+
+TOOLS_DIR := hack/tools
+TOOLS_BIN_DIR := $(abspath $(TOOLS_DIR)/bin)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
 else
@@ -24,6 +35,29 @@ SHELL = /usr/bin/env bash -o pipefail
 
 .PHONY: all
 all: build
+
+KIND_CLUSTER_NAME ?= shopkeeper
+
+# curl retries
+CURL_RETRIES=3
+
+KUBECTL_VER := v1.27.2
+KUBECTL_BIN := $(TOOLS_BIN_DIR)/kubectl
+KUBECTL := $(KUBECTL_BIN)-$(KUBECTL_VER)
+
+## --------------------------------------
+## Tooling Binaries
+## --------------------------------------
+
+$(KUBECTL): ## Build kubectl
+	mkdir -p $(TOOLS_BIN_DIR)
+	rm -f "$(KUBECTL)*"
+	curl --retry $(CURL_RETRIES) -fsL https://storage.googleapis.com/kubernetes-release/release/$(KUBECTL_VER)/bin/$(GOOS)/$(GOARCH)/kubectl -o $(KUBECTL)
+	ln -sf "$(KUBECTL)" "$(KUBECTL_BIN)"
+	chmod +x "$(KUBECTL_BIN)" "$(KUBECTL)"
+
+.PHONY: $(KUBECTL_BIN)
+$(KUBECTL_BIN): $(KUBECTL) ## Building kubectl from the tools folder
 
 ##@ General
 
@@ -161,3 +195,21 @@ $(CONTROLLER_GEN): $(LOCALBIN)
 envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
 $(ENVTEST): $(LOCALBIN)
 	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+
+### Tilt/Kind
+
+.PHONY: kind-create
+kind-create: $(KUBECTL)
+	./scripts/kind-with-registry.sh
+
+.PHONY: kind-delete
+kind-delete: ## Destroys the "keycloak" kind cluster.
+	kind delete cluster --name=$(KIND_CLUSTER_NAME)
+
+.PHONY: tilt-up
+tilt-up: $(ENVSUBST) $(KUSTOMIZE) $(KUBECTL) kind-create ## start tilt and build kind cluster if needed
+	EXP_CLUSTER_RESOURCE_SET=true tilt up
+
+.PHONY: delete-cluster
+delete-cluster: delete-workload-cluster  ## Deletes the example kind cluster "keycloak"
+	kind delete cluster --name=$(KIND_CLUSTER_NAME)
