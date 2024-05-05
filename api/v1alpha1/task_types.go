@@ -35,16 +35,17 @@ const (
 
 // TaskSpec defines the desired state of Task
 type TaskSpec struct {
-	Name    string   `json:"name"`
-	Image   string   `json:"image"`
-	Tag     string   `default:"latest" json:"tag"`
-	Command []string `json:"command,omitempty"`
-	Paused  bool     `json:"paused,omitempty"`
+	Name           string   `json:"name,omitempty"`
+	Image          string   `json:"image,omitempty"`
+	Tag            string   `default:"latest" json:"tag,omitempty"`
+	ServiceAccount string   `default:"default" json:"service_account,omitempty"`
+	Command        []string `json:"command,omitempty"`
+	Paused         bool     `json:"paused,omitempty"`
 }
 
 // TaskStatus defines the observed state of Task
 type TaskStatus struct {
-	Ready          bool    `json:"ready"`
+	Ready          bool    `json:"ready,omitempty"`
 	JobId          string  `json:"job_id,omitempty"`
 	FailureMessage *string `json:"failureMessage,omitempty"`
 }

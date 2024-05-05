@@ -9,8 +9,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	v1 "k8s.io/client-go/applyconfigurations/batch/v1"
-	corev1 "k8s.io/client-go/applyconfigurations/core/v1"
+	applyv1 "k8s.io/client-go/applyconfigurations/batch/v1"
+	applymetav1 "k8s.io/client-go/applyconfigurations/meta/v1"
+
+	v1 "k8s.io/api/core/v1"
+	applycorev1 "k8s.io/client-go/applyconfigurations/core/v1"
 )
 
 // Pointer returns the pointer of any type
@@ -57,18 +60,27 @@ func GetTaskByName(ctx context.Context, c client.Client, namespace, name string)
 }
 
 // TransformJob
-func TransformJob(task *interactionsv1alpha1.Task) v1.JobApplyConfiguration {
-	return v1.JobApplyConfiguration{
-		Spec: &v1.JobSpecApplyConfiguration{
-			Template: &corev1.PodTemplateSpecApplyConfiguration{
-				Spec: &corev1.PodSpecApplyConfiguration{
-					Containers: []corev1.ContainerApplyConfiguration{
+func TransformJob(task *interactionsv1alpha1.Task) applyv1.JobApplyConfiguration {
+	return applyv1.JobApplyConfiguration{
+		TypeMetaApplyConfiguration: applymetav1.TypeMetaApplyConfiguration{
+			Kind:       Pointer("Job"),
+			APIVersion: Pointer("batch/v1"),
+		},
+		ObjectMetaApplyConfiguration: &applymetav1.ObjectMetaApplyConfiguration{
+			Name: &task.Spec.Name,
+		},
+		Spec: &applyv1.JobSpecApplyConfiguration{
+			Template: &applycorev1.PodTemplateSpecApplyConfiguration{
+				Spec: &applycorev1.PodSpecApplyConfiguration{
+					ServiceAccountName: &task.Spec.ServiceAccount,
+					Containers: []applycorev1.ContainerApplyConfiguration{
 						{
 							Name:    &task.Spec.Name,
 							Image:   Pointer(fmt.Sprintf("%s:%s", task.Spec.Image, task.Spec.Tag)),
 							Command: task.Spec.Command,
 						},
 					},
+					RestartPolicy: Pointer(v1.RestartPolicyNever),
 				},
 			},
 		},

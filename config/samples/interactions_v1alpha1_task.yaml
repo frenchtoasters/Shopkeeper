@@ -9,4 +9,9 @@ metadata:
     app.kubernetes.io/created-by: shopkeeper
   name: task-sample
 spec:
-  # TODO(user): Add fields here
+  name: "busybox"
+  image: "busybox"
+  command:
+    - "sleep"
+    - "infinity"
+

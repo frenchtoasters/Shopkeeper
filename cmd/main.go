@@ -40,9 +40,10 @@ import (
 )
 
 var (
-	scheme     = runtime.NewScheme()
-	setupLog   = ctrl.Log.WithName("setup")
-	syncPeriod = 5 * time.Minute
+	scheme           = runtime.NewScheme()
+	setupLog         = ctrl.Log.WithName("setup")
+	reconcileTimeout = 5 * time.Minute
+	syncPeriod       = 5 * time.Minute
 )
 
 func init() {
@@ -98,8 +99,9 @@ func main() {
 	}
 
 	if err = (&controller.TaskReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		ReconcileTimeout: reconcileTimeout,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Task")
 		os.Exit(1)

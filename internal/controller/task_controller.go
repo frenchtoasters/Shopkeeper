@@ -20,11 +20,13 @@ import (
 	"context"
 	"time"
 
+	"github.com/pkg/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	"sigs.k8s.io/cluster-api/util/patch"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -33,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	interactionsv1alpha1 "frenchtoasters.io/shopkeeper/api/v1alpha1"
+	"frenchtoasters.io/shopkeeper/scope"
 )
 
 // TaskReconciler reconciles a Task object
@@ -47,7 +50,7 @@ type TaskReconciler struct {
 //+kubebuilder:rbac:groups=interactions.frenchtoasters.io,resources=tasks/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=interactions.frenchtoasters.io,resources=tasks/finalizers,verbs=update
 
-func (r *TaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *TaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 
 	ctx, cancel := context.WithTimeout(ctx, r.ReconcileTimeout)
 	defer cancel()
@@ -79,27 +82,36 @@ func (r *TaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, nil
 	}
 
-	if !shopkeeperTask.DeletionTimestamp.IsZero() {
-		return r.reconcileDelete(ctx, task)
+	shopkeeperScope, err := scope.NewShopkeeperScope(ctx, scope.ShopkeeperScopeParams{
+		Client: r.Client,
+		Task:   task,
+	})
+	if err != nil {
+		return ctrl.Result{}, errors.Errorf("failed to create scope: %+v", err)
 	}
 
-	return r.reconcile(ctx, task)
+	defer func() {
+		if err := shopkeeperScope.Close(); err != nil && reterr == nil {
+			reterr = err
+		}
+	}()
+
+	if !shopkeeperTask.DeletionTimestamp.IsZero() {
+		return r.reconcileDelete(ctx, shopkeeperScope)
+	}
+
+	return r.reconcile(ctx, shopkeeperScope)
 }
 
-func (r *TaskReconciler) reconcile(ctx context.Context, taskScope *interactionsv1alpha1.Task) (ctrl.Result, error) {
+func (r *TaskReconciler) reconcile(ctx context.Context, shopkeeperScope *scope.ShopkeeperScope) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 	log.Info("Reconciling ShopkeeperTask")
 
-	taskScope.Status.Ready = false
-	taskScope.Status.FailureMessage = Pointer("")
+	shopkeeperScope.Task.Status.Ready = false
+	shopkeeperScope.Task.Status.FailureMessage = Pointer("")
 
-	helper, err := patch.NewHelper(taskScope, r.Client)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	controllerutil.AddFinalizer(taskScope, interactionsv1alpha1.ShopkeeperTaskFinalizer)
-	if err := (*patch.Helper).Patch(helper, context.TODO(), taskScope); err != nil {
+	controllerutil.AddFinalizer(shopkeeperScope.Task, interactionsv1alpha1.ShopkeeperTaskFinalizer)
+	if err := shopkeeperScope.PatchObject(); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -114,36 +126,39 @@ func (r *TaskReconciler) reconcile(ctx context.Context, taskScope *interactionsv
 		panic(err.Error())
 	}
 
-	jobConfig := TransformJob(taskScope)
+	jobConfig := TransformJob(shopkeeperScope.Task)
 
-	job, err := clientset.BatchV1().Jobs(taskScope.Namespace).Apply(ctx, &jobConfig, v1.ApplyOptions{})
+	job, err := clientset.BatchV1().Jobs(shopkeeperScope.Task.Namespace).Apply(ctx, &jobConfig, v1.ApplyOptions{FieldManager: "application/apply-patch"})
 	if err != nil {
-		taskScope.Status.FailureMessage = Pointer(err.Error())
-		if err := (*patch.Helper).Patch(helper, context.TODO(), taskScope); err != nil {
+		shopkeeperScope.Task.Status.FailureMessage = Pointer(err.Error())
+		if err := shopkeeperScope.PatchObject(); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, err
 	}
 
-	taskScope.Status.JobId = job.GetSelfLink()
-	taskScope.Status.Ready = true
-	if err := (*patch.Helper).Patch(helper, context.TODO(), taskScope); err != nil {
+	shopkeeperScope.Task.Status.JobId = job.GetSelfLink()
+	shopkeeperScope.Task.Status.Ready = true
+	if err := shopkeeperScope.PatchObject(); err != nil {
 		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
 }
 
-func (r *TaskReconciler) reconcileDelete(ctx context.Context, taskScope *interactionsv1alpha1.Task) (ctrl.Result, error) {
+func (r *TaskReconciler) reconcileDelete(ctx context.Context, shopkeeperScope *scope.ShopkeeperScope) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 	log.Info("Reconciling Delete ShopkeeperTask")
 
-	if err := r.Client.Delete(ctx, taskScope); err != nil {
-		log.Error(err, "delete error")
+	controllerutil.RemoveFinalizer(shopkeeperScope.Task, interactionsv1alpha1.ShopkeeperTaskFinalizer)
+	if err := shopkeeperScope.PatchObject(); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	controllerutil.RemoveFinalizer(taskScope, interactionsv1alpha1.ShopkeeperTaskFinalizer)
+	if err := r.Client.Delete(ctx, shopkeeperScope.Task); err != nil {
+		log.Error(err, "delete error")
+		return ctrl.Result{}, err
+	}
 
 	return ctrl.Result{}, nil
 }
