@@ -54,7 +54,7 @@ spec:
             properties:
               failureMessage:
                 type: string
-              job_id:
+              job_status:
                 type: string
               ready:
                 type: boolean

@@ -46,7 +46,7 @@ type TaskSpec struct {
 // TaskStatus defines the observed state of Task
 type TaskStatus struct {
 	Ready          bool    `json:"ready,omitempty"`
-	JobId          string  `json:"job_id,omitempty"`
+	JobStatus      string  `json:"job_status,omitempty"`
 	FailureMessage *string `json:"failureMessage,omitempty"`
 }
 
